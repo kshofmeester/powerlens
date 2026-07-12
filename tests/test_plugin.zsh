@@ -141,5 +141,35 @@ local nofan_plain=$(print "$nofan_out" | sed 's/\x1b\[[0-9;]*m//g; s/%{[^}]*}//g
 assert_eq "SHOW_FAN=false hides fan widget" "${nofan_plain##*🌀}" "$nofan_plain"
 POWERLENS_SHOW_FAN=true
 
+print "\n=== jget_arr ==="
+local arr_json='{"cpu":34.2,"cpu_hist":[10,20,30],"mem_hist":[],"ts":1}'
+assert_eq "jget_arr extracts values" "$(_powerlens_jget_arr "$arr_json" cpu_hist)" "10 20 30"
+assert_eq "jget_arr empty array"     "$(_powerlens_jget_arr "$arr_json" mem_hist)" ""
+assert_eq "jget_arr missing key"     "$(_powerlens_jget_arr "$arr_json" no_hist)"  ""
+
+print "\n=== sparkline (block) ==="
+POWERLENS_TREND_CHARSET=block
+# 值 0,50,100 归一到 0..7: 0→▁(idx0), 50→▄(idx3或4), 100→█(idx7)
+local spark=$(_powerlens_sparkline "0 50 100" 0 100)
+assert_eq "block first char is lowest" "${spark[1]}" "▁"
+assert_eq "block last char is highest" "${spark[-1]}" "█"
+assert_eq "block length equals point count" "${#spark}" "3"
+# 空 / 单点 → 空串
+assert_eq "sparkline empty input"  "$(_powerlens_sparkline "" 0 100)"     ""
+assert_eq "sparkline single point" "$(_powerlens_sparkline "42" 0 100)"   ""
+# 超界 clamp:值 999 (>max 100) → 满格
+local clamp=$(_powerlens_sparkline "0 999" 0 100)
+assert_eq "clamp over-max to full" "${clamp[-1]}" "█"
+# max<=min 防除零 → 全部最低格
+local degen=$(_powerlens_sparkline "5 8" 10 10)
+assert_eq "degenerate range all lowest" "${degen}" "▁▁"
+
+print "\n=== sparkline (braille) ==="
+POWERLENS_TREND_CHARSET=braille
+local bspark=$(_powerlens_sparkline "0 100" 0 100)
+assert_eq "braille first char lowest"  "${bspark[1]}" "⣀"
+assert_eq "braille last char highest"  "${bspark[-1]}" "⣿"
+POWERLENS_TREND_CHARSET=braille
+
 print "\nResults: ${PASS} passed, ${FAIL} failed"
 (( FAIL == 0 ))

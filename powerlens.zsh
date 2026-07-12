@@ -1,5 +1,6 @@
 # PowerLens core — loaded by powerlens.plugin.zsh
 zmodload zsh/datetime
+zmodload zsh/mathfunc  # 提供 int() 供 sparkline 归一化取整
 
 _POWERLENS_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/powerlens"
 _POWERLENS_PIDFILE="$_POWERLENS_CACHE/daemon.pid"
@@ -57,6 +58,50 @@ _powerlens_jget() {
         val="${val// /}"
     fi
     print -n "$val"
+}
+
+# 从 JSON 抽取数组字段,打印以空格分隔的值。
+# 输入 {"k":[1,2,3]} → 打印 "1 2 3";空数组或缺失键 → 打印空串。
+_powerlens_jget_arr() {
+    local json=$1 key=$2 body
+    if [[ $json =~ "\"${key}\":\[([^]]*)\]" ]]; then
+        body="${match[1]}"
+        [[ -z "$body" ]] && return
+        print -n "${body//,/ }"
+    fi
+}
+
+# 把一串数值渲染成趋势 sparkline。
+# 用法: _powerlens_sparkline "v1 v2 v3 ..." <min> <max>
+# 每个值按 (v-min)/(max-min) 归一到 0..7,映射到 8 级字符;
+# 值超出 [min,max] 被 clamp;max<=min 时退化为全部最低格;点数<2 打印空串。
+# 字符集由 POWERLENS_TREND_CHARSET 决定: braille(默认) | block。
+_powerlens_sparkline() {
+    local vals=(${=1}) min=$2 max=$3
+    (( ${#vals} < 2 )) && return
+
+    local chars
+    if [[ "$POWERLENS_TREND_CHARSET" == "block" ]]; then
+        chars=(▁ ▂ ▃ ▄ ▅ ▆ ▇ █)
+    else
+        chars=(⣀ ⣄ ⣤ ⣦ ⣶ ⣷ ⣾ ⣿)
+    fi
+
+    local span=$(( max - min ))
+    local out="" v idx level
+    for v in $vals; do
+        if (( span <= 0 )); then
+            idx=1
+        else
+            level=$(( (v - min) * 7.0 / span ))
+            (( level < 0 )) && level=0
+            (( level > 7 )) && level=7
+            # 四舍五入到最近整数格,数组下标从 1 起。
+            idx=$(( int(level + 0.5) + 1 ))
+        fi
+        out+="${chars[idx]}"
+    done
+    print -n "$out"
 }
 
 _powerlens_update_rprompt() {
