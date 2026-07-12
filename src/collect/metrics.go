@@ -20,6 +20,12 @@ type Metrics struct {
 	NetIface     string  `json:"net_iface"`
 	NetIfaceType string  `json:"net_iface_type"` // wifi | ethernet | other
 	Ts           int64   `json:"ts"`
+	// 各指标的历史序列，供 sparkline 趋势展示使用
+	CpuHist   []float64 `json:"cpu_hist"`
+	PowerHist []float64 `json:"power_hist"`
+	MemHist   []float64 `json:"mem_hist"`
+	TempHist  []float64 `json:"temp_hist"`
+	FanHist   []float64 `json:"fan_hist"`
 }
 
 func WriteJSON(path string, m Metrics) error {

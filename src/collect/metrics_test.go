@@ -74,3 +74,33 @@ func TestWriteJSON(t *testing.T) {
 		t.Errorf("round-trip mismatch: %+v", got)
 	}
 }
+
+// TestWriteJSONHistoryRoundTrip 验证 history 字段能正确写入并读回。
+func TestWriteJSONHistoryRoundTrip(t *testing.T) {
+	m := collect.Metrics{
+		CpuHist:   []float64{1, 2, 3},
+		PowerHist: []float64{10, 20},
+		MemHist:   []float64{},
+		TempHist:  []float64{50, 55},
+		FanHist:   []float64{1200},
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "metrics.json")
+	if err := collect.WriteJSON(path, m); err != nil {
+		t.Fatalf("WriteJSON error: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read file error: %v", err)
+	}
+	var got collect.Metrics
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	if len(got.CpuHist) != 3 || got.CpuHist[2] != 3 {
+		t.Errorf("CpuHist round-trip mismatch: %v", got.CpuHist)
+	}
+	if len(got.FanHist) != 1 || got.FanHist[0] != 1200 {
+		t.Errorf("FanHist round-trip mismatch: %v", got.FanHist)
+	}
+}
