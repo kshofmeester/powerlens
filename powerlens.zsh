@@ -233,11 +233,30 @@ _powerlens_format() {
     net_iface_type=$(_powerlens_jget "$json" "net_iface_type")
     fan_speed=$(_powerlens_jget "$json" "fan_speed")
 
+    # 若开启趋势,为指定指标追加带色 sparkline。metric 用于取 MODERATE 阈值作量程上界。
+    _pl_trend() {
+        [[ "$POWERLENS_SHOW_TREND" != "true" ]] && return
+        local metric=$1 hist_key=$2 color=$3
+        local series=$(_powerlens_jget_arr "$json" "$hist_key")
+        [[ -z "$series" ]] && return
+        local upper
+        case $metric in
+            power) upper=$POWERLENS_THRESH_POWER_MODERATE ;;
+            cpu)   upper=$POWERLENS_THRESH_CPU_MODERATE ;;
+            mem)   upper=$POWERLENS_THRESH_MEM_MODERATE ;;
+            temp)  upper=$POWERLENS_THRESH_TEMP_MODERATE ;;
+            fan)   upper=$POWERLENS_THRESH_FAN_MODERATE ;;
+        esac
+        local spark=$(_powerlens_sparkline "$series" 0 "$upper")
+        [[ -n "$spark" ]] && result+="$(_powerlens_wrap $color "$spark")"
+    }
+
     local sep=" "
     local result=""
 
     local pc=$(_powerlens_color power $power)
     result+="$(_powerlens_wrap $pc "⚡$(_powerlens_fmt_num $power)W")"
+    _pl_trend power power_hist $pc
 
     # 🔋 Battery (follows power color)
     if [[ "$POWERLENS_SHOW_BATTERY" == "true" ]]; then
@@ -249,6 +268,7 @@ _powerlens_format() {
     if [[ "$POWERLENS_SHOW_CPU" == "true" ]]; then
         local cc=$(_powerlens_color cpu $cpu)
         result+="${sep}$(_powerlens_wrap $cc "⚙$(_powerlens_fmt_num $cpu)%%")"
+        _pl_trend cpu cpu_hist $cc
     fi
 
     if [[ "$POWERLENS_SHOW_TEMP" == "true" ]]; then
@@ -269,6 +289,7 @@ _powerlens_format() {
             fi
         fi
         result+="${sep}$(_powerlens_wrap $tc "$temp_str")"
+        _pl_trend temp temp_hist $tc
     fi
 
     if [[ "$POWERLENS_SHOW_FAN" == "true" && -n "$fan_speed" && "$fan_speed" != "-1" ]]; then
@@ -280,11 +301,13 @@ _powerlens_format() {
             fan_str="🌀$(printf "%.0f" $fan_speed)"
         fi
         result+="${sep}$(_powerlens_wrap $fc "$fan_str")"
+        _pl_trend fan fan_hist $fc
     fi
 
     if [[ "$POWERLENS_SHOW_MEM" == "true" ]]; then
         local mc=$(_powerlens_color mem $mem)
         result+="${sep}$(_powerlens_wrap $mc "🧠$(_powerlens_fmt_num $mem)%%")"
+        _pl_trend mem mem_hist $mc
     fi
 
     if [[ "$POWERLENS_SHOW_NET" == "true" ]]; then

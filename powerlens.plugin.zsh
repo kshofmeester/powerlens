@@ -5,6 +5,10 @@
 : ${POWERLENS_MODE:=compact}          # compact | full
 : ${POWERLENS_COLOR_MODE:=multi}      # multi | alert
 
+# ── Trend sparkline ─────────────────────────────────────────
+: ${POWERLENS_SHOW_TREND:=false}       # true | false
+: ${POWERLENS_TREND_CHARSET:=braille}  # braille | block
+
 # ── Per-metric toggles ───────────────────────────────────────
 : ${POWERLENS_SHOW_BATTERY:=true}
 : ${POWERLENS_SHOW_CPU:=true}

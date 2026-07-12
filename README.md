@@ -84,7 +84,11 @@ All options are set in `~/.zshrc` **before** the `plugins=(...)` line.
 ```zsh
 POWERLENS_MODE=compact        # compact | full
 POWERLENS_COLOR_MODE=multi    # multi   | alert
+POWERLENS_SHOW_TREND=false    # true | false — 在指标旁显示趋势 sparkline
+POWERLENS_TREND_CHARSET=braille  # braille | block — 趋势字符集
 ```
+
+> **Trend sparkline** — 开启后，power/cpu/mem/temp/fan 数值旁会附一串趋势字符，展示最近约 48 秒走势（量程上界取各指标的 `MODERATE` 阈值）。默认字符集为 Braille；若终端字体不支持 Braille，设为 `block`（`▁▂▃▄▅▆▇█`）。
 
 **`compact`** (default):
 ```
@@ -241,7 +245,7 @@ make clean      # Remove built binaries
 
 ## Open Questions / Roadmap
 
-- [ ] Historical mini-graph using Unicode Braille (`⣀⣄⣆⣇⣗⣷⣿`) in expanded mode
+- [x] Historical mini-graph using Unicode Braille / block sparkline in expanded mode
 - [ ] powerlevel10k geometry integration
 - [ ] Multiple battery support (MagSafe + Thunderbolt)
 - [ ] CI notarization via GitHub Actions

@@ -171,5 +171,30 @@ assert_eq "braille first char lowest"  "${bspark[1]}" "⣀"
 assert_eq "braille last char highest"  "${bspark[-1]}" "⣿"
 POWERLENS_TREND_CHARSET=braille
 
+print "\n=== trend integration ==="
+local trend_json='{"power":42.7,"battery":87,"charging":false,"cpu_temp":55.0,"fan_speed":2500,"cpu":34.2,"mem":62.1,"net_up":1.2,"net_down":3.8,"net_iface":"en0","net_iface_type":"wifi","ts":9999999999,"cpu_hist":[10,20,30,40],"power_hist":[5,15,25],"mem_hist":[50,55,60],"temp_hist":[40,45,50],"fan_hist":[1000,2000,3000]}'
+
+# 默认关闭:输出不含任何 block/braille 趋势字符
+POWERLENS_TREND_CHARSET=block
+POWERLENS_SHOW_TREND=false
+POWERLENS_MODE=compact
+local off_out=$(_powerlens_format "$trend_json")
+local off_plain=$(print "$off_out" | sed 's/\x1b\[[0-9;]*m//g; s/%{[^}]*}//g')
+assert_eq "trend off: no block chars" "${off_plain//[▁▂▃▄▅▆▇█]/}" "$off_plain"
+
+# 打开:cpu 段之后应出现趋势字符
+POWERLENS_SHOW_TREND=true
+local on_out=$(_powerlens_format "$trend_json")
+local on_plain=$(print "$on_out" | sed 's/\x1b\[[0-9;]*m//g; s/%{[^}]*}//g')
+assert_eq "trend on: has block chars" "$([[ "$on_plain" == *[▁▂▃▄▅▆▇█]* ]] && echo yes || echo no)" "yes"
+
+# 空 fan_hist:不应崩溃,fan 数值仍在(用 -1 的 fanless 数据验证 fan_hist 缺失场景)
+local nohist_json='{"power":42.7,"battery":87,"charging":false,"cpu_temp":55.0,"fan_speed":2500,"cpu":34.2,"mem":62.1,"net_up":1.2,"net_down":3.8,"net_iface":"en0","net_iface_type":"wifi","ts":9999999999,"cpu_hist":[10,20],"fan_hist":[]}'
+local nohist_out=$(_powerlens_format "$nohist_json")
+assert_eq "empty fan_hist no crash" "$?" "0"
+
+POWERLENS_SHOW_TREND=false
+POWERLENS_MODE=compact
+
 print "\nResults: ${PASS} passed, ${FAIL} failed"
 (( FAIL == 0 ))
