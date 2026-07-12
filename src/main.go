@@ -34,8 +34,31 @@ func main() {
 
 	var prev collect.NetSample
 	interval := time.Duration(*refresh) * time.Second
+
+	// 每个带趋势的指标持有一个环形缓冲(容量 24,约 48 秒窗口 @ refresh=2s)。
+	// 缓冲是跨采样轮次的状态,故置于循环外,不进入无状态的 All()。
+	const histSize = 24
+	cpuBuf := collect.NewRingBuffer(histSize)
+	powerBuf := collect.NewRingBuffer(histSize)
+	memBuf := collect.NewRingBuffer(histSize)
+	tempBuf := collect.NewRingBuffer(histSize)
+	fanBuf := collect.NewRingBuffer(histSize)
+
 	for {
 		m, _ := collect.All(*iface, &prev)
+
+		cpuBuf.Push(m.CPU)
+		powerBuf.Push(m.Power)
+		memBuf.Push(m.Mem)
+		tempBuf.Push(m.CpuTemp)
+		fanBuf.Push(m.FanSpeed)
+
+		m.CpuHist = cpuBuf.Slice()
+		m.PowerHist = powerBuf.Slice()
+		m.MemHist = memBuf.Slice()
+		m.TempHist = tempBuf.Slice()
+		m.FanHist = fanBuf.Slice()
+
 		collect.WriteJSON(outPath, m) //nolint:errcheck
 		time.Sleep(interval)
 	}
