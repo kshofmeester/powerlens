@@ -17,9 +17,6 @@ src/powerlens-fetch-arm64
 src/powerlens-fetch-amd64
 src/*.test
 
-# Internal AI planning docs
-docs/superpowers/
-
 # Editor
 .idea/
 .vscode/
