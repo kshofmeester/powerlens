@@ -57,8 +57,8 @@ static kern_return_t smcCall(io_connect_t conn, int idx,
 	return IOConnectCallStructMethod(conn, idx, in, inSz, out, &outSz);
 }
 
-// getCPUDieTemp opens the SMC, tries keys TC0D / TC0P / TC0F,
-// and returns temperature in degrees Celsius (sp78 format), or -1.0 on failure.
+// getCPUDieTemp opens the SMC and averages valid CPU core temperatures
+// across Apple Silicon (flt ) or Intel (sp78) keys, returning °C or -1.0.
 double getCPUDieTemp() {
 	io_iterator_t iter = 0;
 	io_object_t   svc  = 0;
@@ -79,26 +79,69 @@ double getCPUDieTemp() {
 	}
 	IOObjectRelease(svc);
 
-	// sp78: signed fixed-point 8.8, 2 bytes big-endian → divide by 256 for °C
+	// flt : IEEE 754 float32, 4 bytes little-endian (Apple Silicon)
+	// sp78: signed fixed-point 8.8, 2 bytes big-endian → divide by 256 (Intel)
+	uint32_t flt  = ((uint32_t)'f' << 24) | ((uint32_t)'l' << 16)
+	              | ((uint32_t)'t' <<  8) | (uint32_t)' ';
 	uint32_t sp78 = ((uint32_t)'s' << 24) | ((uint32_t)'p' << 16)
 	              | ((uint32_t)'7' <<  8) | (uint32_t)'8';
 
-	const char *keys[] = {"TC0D", "TC0P", "TC0F", NULL};
-	for (int k = 0; keys[k] && temp < 0; k++) { // temp<0 means "not yet read"; 0°C is a valid exit
-		SMCKeyData_t in = {0}, out = {0};
-		in.key   = smcKey(keys[k]);
-		in.data8 = SMC_CMD_READ_KEYINFO;
-		if (smcCall(conn, KERNEL_INDEX_SMC, &in, &out) != kIOReturnSuccess) continue;
-		if (out.keyInfo.dataType != sp78 || out.keyInfo.dataSize < 2)       continue;
+	const char *m3Keys[] = {
+		"Te05", "Te0L", "Te0P", "Te0S",
+		"Tf04", "Tf09", "Tf0A", "Tf0B", "Tf0D", "Tf0E",
+		"Tf44", "Tf49", "Tf4A", "Tf4B", "Tf4D", "Tf4E",
+		NULL
+	};
+	const char *m12Keys[] = {
+		"Tp09", "Tp0T", "Tp01", "Tp05", "Tp0D", "Tp0H", "Tp0L", "Tp0P", "Tp0X", "Tp0b",
+		NULL
+	};
+	const char *intelKeys[] = {"TC0D", "TC0P", "TC0F", NULL};
+	const char **groups[]   = {m3Keys, m12Keys, intelKeys, NULL};
 
-		SMCKeyData_t in2 = {0}, out2 = {0};
-		in2.key              = smcKey(keys[k]);
-		in2.keyInfo.dataSize = out.keyInfo.dataSize;
-		in2.data8            = SMC_CMD_READ_BYTES;
-		if (smcCall(conn, KERNEL_INDEX_SMC, &in2, &out2) != kIOReturnSuccess) continue;
+	for (int g = 0; groups[g] && temp < 0; g++) {
+		double sum = 0.0;
+		int count  = 0;
 
-		int16_t raw = (int16_t)(((uint8_t)out2.bytes[0] << 8) | (uint8_t)out2.bytes[1]);
-		temp = (double)raw / 256.0;
+		for (int k = 0; groups[g][k]; k++) {
+			SMCKeyData_t in = {0}, out = {0};
+			in.key   = smcKey(groups[g][k]);
+			in.data8 = SMC_CMD_READ_KEYINFO;
+			if (smcCall(conn, KERNEL_INDEX_SMC, &in, &out) != kIOReturnSuccess) continue;
+
+			int isFlt  = (out.keyInfo.dataType == flt  && out.keyInfo.dataSize == 4);
+			int isSp78 = (out.keyInfo.dataType == sp78 && out.keyInfo.dataSize >= 2);
+			if (!isFlt && !isSp78) continue;
+
+			SMCKeyData_t in2 = {0}, out2 = {0};
+			in2.key              = in.key;
+			in2.keyInfo.dataSize = out.keyInfo.dataSize;
+			in2.data8            = SMC_CMD_READ_BYTES;
+			if (smcCall(conn, KERNEL_INDEX_SMC, &in2, &out2) != kIOReturnSuccess) continue;
+
+			double val = -1.0;
+			if (isFlt) {
+				union { uint8_t b[4]; float f; } u;
+				u.b[0] = (uint8_t)out2.bytes[0];
+				u.b[1] = (uint8_t)out2.bytes[1];
+				u.b[2] = (uint8_t)out2.bytes[2];
+				u.b[3] = (uint8_t)out2.bytes[3];
+				val = (double)u.f;
+			} else {
+				int16_t raw = (int16_t)(((uint8_t)out2.bytes[0] << 8) | (uint8_t)out2.bytes[1]);
+				val = (double)raw / 256.0;
+			}
+
+			// Reject NaN and idle-core 0–6°C readings
+			if (val > 10.0 && val < 120.0) {
+				sum += val;
+				count++;
+			}
+		}
+
+		if (count > 0) {
+			temp = sum / (double)count;
+		}
 	}
 
 	IOServiceClose(conn);
